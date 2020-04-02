@@ -131,6 +131,10 @@ def main():
         help='Words to use for simulated string values')
 
     parser.add_argument(
+        '--row_hint', metavar='<words>', action='append',
+        help='Row hints')
+
+    parser.add_argument(
         '--string-pool-file', metavar='<FILE>', type=str,
         help='File containing the words for simulating SNMP string values')
 
@@ -164,6 +168,10 @@ def main():
         type=_parse_range, default=(0, 0xffffffff),
         help='Range of values used to populate simulated Timeticks values')
 
+    parser.add_argument(
+        '--values-range-file', metavar='<FILE>', type=str,
+        help='SNMP simulation data for each OID - to meet constraints')
+
     args = parser.parse_args()
 
     if args.debug:
@@ -176,9 +184,10 @@ def main():
         with open(args.string_pool_file) as fl:
             args.string_pool = fl.read().split()
 
-    elif args.string_pool:
+    else:
         args.string_pool = ['Jaded', 'zombies', 'acted', 'quaintly', 'but',
                             'kept', 'driving', 'their', 'oxen', 'forward']
+
 
     if args.output_file:
         ext = os.path.extsep + RECORD_TYPES[args.destination_record_type].ext
@@ -202,13 +211,13 @@ def main():
             msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
 
     def get_value(syntax, hint='', automatic_values=args.automatic_values):
-
         make_guess = args.automatic_values
 
         val = None
 
         while True:
             if make_guess:
+
                 if isinstance(syntax, rfc1902.IpAddress):
                     val = '.'.join([str(random.randrange(1, 256)) for x in range(4)])
 
@@ -222,7 +231,14 @@ def main():
                     val = random.randrange(args.counter_range[0], args.counter_range[1])
 
                 elif isinstance(syntax, rfc1902.Integer32):
-                    val = random.randrange(args.integer32_range[0], args.integer32_range[1])
+                    if len(syntax.namedValues) > 0:
+                        values = []
+                        for v in syntax.getNamedValues().values():
+                            values.append(v)
+                        val = values[random.randrange(0, len(values))]
+                    syntax.getSubtypeSpec()
+                    else:
+                        val = random.randrange(args.integer32_range[0], args.integer32_range[1])
 
                 elif isinstance(syntax, rfc1902.Unsigned32):
                     val = random.randrange(args.unsigned_range[0], args.unsigned_range[1])
