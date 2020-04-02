@@ -65,7 +65,6 @@ def _parse_range(arg):
 
 
 def main():
-
     parser = argparse.ArgumentParser(description=DESCRIPTION)
 
     parser.add_argument(
@@ -174,6 +173,14 @@ def main():
 
     args = parser.parse_args()
 
+    mocks = {}
+
+    if args.values_range_file:
+        with open(args.values_range_file) as mock_values:
+            for line in mock_values.readlines():
+                line = line.strip()
+                l = line.split(':', 1)
+                mocks[l[0]] = l[1].strip()
     if args.debug:
         debug.setLogger(debug.Debug(*args.debug))
 
@@ -187,7 +194,6 @@ def main():
     else:
         args.string_pool = ['Jaded', 'zombies', 'acted', 'quaintly', 'but',
                             'kept', 'driving', 'their', 'oxen', 'forward']
-
 
     if args.output_file:
         ext = os.path.extsep + RECORD_TYPES[args.destination_record_type].ext
@@ -231,12 +237,27 @@ def main():
                     val = random.randrange(args.counter_range[0], args.counter_range[1])
 
                 elif isinstance(syntax, rfc1902.Integer32):
+                    if 'Scalar' in hint:
+                        paramName = hint.split('::')[1].split(' ')[0]
+                    elif 'Column' in hint:
+                        paramName = hint[hint.rindex('::')+2::].split(' ')[0]
+                    else:
+                        paramName = ''
                     if len(syntax.namedValues) > 0:
                         values = []
                         for v in syntax.getNamedValues().values():
                             values.append(v)
                         val = values[random.randrange(0, len(values))]
-                    syntax.getSubtypeSpec()
+                    elif paramName in mocks:
+                        values = mocks[paramName]
+                        type = values[0]
+                        if type == "<": #range
+                            mock_range = values[1:-1].split(',')
+                            val = random.uniform(int(mock_range[0]), int(mock_range[1]))
+                        else: #values list
+                            mock_range = values[1:-1].split('|')
+                            val = mock_range[random.randrange(0, len(mock_range))]
+
                     else:
                         val = random.randrange(args.integer32_range[0], args.integer32_range[1])
 
@@ -247,8 +268,24 @@ def main():
                     val = random.randrange(args.counter64_range[0], args.counter64_range[1])
 
                 elif isinstance(syntax, univ.OctetString):
-                    maxWords = 10
-                    val = ' '.join([args.string_pool[random.randrange(0, len(args.string_pool))]
+                    if 'Scalar' in hint:
+                        paramName = hint.split('::')[1].split(' ')[0]
+                    elif 'Column' in hint:
+                        paramName = hint[hint.rindex('::')+2::].split(' ')[0]
+                    else:
+                        paramName = ''
+                    if paramName in mocks:
+                        values = mocks[paramName]
+                        type = values[0]
+                        if type == "<": #range
+                            mock_range = values[1:-1].split(',')
+                            val = random.uniform(int(mock_range[0]), int(mock_range[1]))
+                        else: #values list
+                            mock_range = values[1:-1].split('|')
+                            val = mock_range[random.randrange(0, len(mock_range))]
+                    else:
+                        maxWords = 10
+                        val = ' '.join([args.string_pool[random.randrange(0, len(args.string_pool))]
                                     for i in range(random.randrange(1, maxWords))])
 
                 elif isinstance(syntax, univ.ObjectIdentifier):
@@ -279,6 +316,7 @@ def main():
 
             except PyAsn1Error as exc:
                 if make_guess == 1:
+                    #print (hint)
                     sys.stderr.write(
                         '*** Inconsistent value: %s\r\n*** See constraints and '
                         'suggest a better one for:\r\n' % exc)
